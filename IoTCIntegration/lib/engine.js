@@ -125,18 +125,30 @@ async function getDeviceHub(context, device) {
     }
 
     const sasToken = await getRegistrationSasToken(context, deviceId);
+    const bodyJson = {
+        registrationId: deviceId
+    };
+    
+    if(device.gatewayId){
+        /*bodyJson["data"]=  {
+            "__iotcGatewayId": device.gatewayId
+        }
+        */
+       bodyJson["data"]= {
+        "__iot:interfaces": {
+           "CapabilityModelUri": "http://example.com/Amqp/1.0.0",
+           "ModelRepositoryUri": "https://iotpnptest.azurewebsites.net"
+         }
+       }
+
+    }
 
     const registrationOptions = {
         url: `https://${registrationHost}/${context.idScope}/registrations/${deviceId}/register?api-version=${registrationApiVersion}`,
         method: 'PUT',
         json: true,
         headers: { Authorization: sasToken },
-        body: {
-            registrationId: deviceId,
-            data: {
-                "__iot:central:gatewayId": device.gatewayId
-            }
-        }
+        body: bodyJson,
     };
 
     try {
