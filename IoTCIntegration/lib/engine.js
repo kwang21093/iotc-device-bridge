@@ -45,7 +45,7 @@ module.exports = async function (context, device, measurements) {
 
     const gatewayClient = Device.Client.fromConnectionString(await getDeviceConnectionString(context, gatewayDevice), DeviceTransport.Http);
     try {
-        await util.promisify(client.open.bind(gatewayClient))();
+        await util.promisify(gatewayClient.open.bind(gatewayClient))();
         context.log('[HTTP] Sending telemetry for gateway device', gatewayDevice.deviceId);
         await util.promisify(gatewayClient.sendEvent.bind(gatewayClient))(new Device.Message(JSON.stringify({["ping"]:1})));
         await util.promisify(gatewayClient.close.bind(gatewayClient))();
