@@ -15,9 +15,10 @@ const registrationHost = 'global.azure-devices-provisioning.net';
 const registrationSasTtl = 3600; // 1 hour
 const registrationApiVersion = `2018-09-01-preview`;
 const registrationRetryTimeouts = [500, 1000, 2000, 4000];
-const minDeviceRegistrationTimeout = 60*1000; // 1 minute
+const minDeviceRegistrationTimeout = 60 * 1000; // 1 minute
 
 const deviceCache = {};
+let gatewayDevice;
 
 /**
  * Forwards external telemetry messages for IoT Central devices.
@@ -38,6 +39,26 @@ module.exports = async function (context, device, measurements) {
         throw new StatusError('Invalid format: invalid measurement list.', 400);
     }
 
+    if (!gatewayDevice) {
+        gatewayDevice = { deviceId: "iotc-bridge-gateway" };
+    }
+
+    const gatewayClient = Device.Client.fromConnectionString(await getDeviceConnectionString(context, gatewayDevice), DeviceTransport.Http);
+    try {
+        await util.promisify(client.open.bind(gatewayClient))();
+        context.log('[HTTP] Sending telemetry for gateway device', gatewayDevice.deviceId);
+        await util.promisify(gatewayClient.sendEvent.bind(gatewayClient))(new Device.Message(JSON.stringify({["ping"]:1})));
+        await util.promisify(gatewayClient.close.bind(gatewayClient))();
+
+    } catch (e) {
+        // If the device was deleted, we remove its cached connection string
+        if (e.name === 'DeviceNotFoundError' && deviceCache[gatewayDevice.deviceId]) {
+            delete deviceCache[gatewayDevice.deviceId].connectionString;
+        }
+        throw new Error(`Unable to send telemetry for gateway device ${gatewayDevice.deviceId}: ${e.message}`);
+    }
+
+    device.gatewayId = gatewayDevice.deviceId;
     const client = Device.Client.fromConnectionString(await getDeviceConnectionString(context, device), DeviceTransport.Http);
 
     try {
@@ -110,7 +131,12 @@ async function getDeviceHub(context, device) {
         method: 'PUT',
         json: true,
         headers: { Authorization: sasToken },
-        body: { registrationId: deviceId }
+        body: {
+            registrationId: deviceId,
+            data: {
+                "__iot:central:gatewayId": device.gatewayId
+            }
+        }
     };
 
     try {
@@ -157,7 +183,7 @@ async function getRegistrationSasToken(context, deviceId) {
     const signature = crypto.createHmac('sha256', new Buffer(await getDeviceKey(context, deviceId), 'base64'))
         .update(`${uri}\n${ttl}`)
         .digest('base64');
-    return`SharedAccessSignature sr=${uri}&sig=${encodeURIComponent(signature)}&skn=registration&se=${ttl}`;
+    return `SharedAccessSignature sr=${uri}&sig=${encodeURIComponent(signature)}&skn=registration&se=${ttl}`;
 }
 
 /**
