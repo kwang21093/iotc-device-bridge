@@ -13,7 +13,7 @@ const StatusError = require('../error').StatusError;
 
 const registrationHost = 'global.azure-devices-provisioning.net';
 const registrationSasTtl = 3600; // 1 hour
-const registrationApiVersion = `2018-09-01-preview`;
+const registrationApiVersion = `2019-01-15`;
 const registrationRetryTimeouts = [500, 1000, 2000, 4000];
 const minDeviceRegistrationTimeout = 60 * 1000; // 1 minute
 
@@ -47,7 +47,8 @@ module.exports = async function (context, device, measurements) {
     try {
         await util.promisify(gatewayClient.open.bind(gatewayClient))();
         context.log('[HTTP] Sending telemetry for gateway device', gatewayDevice.deviceId);
-        await util.promisify(gatewayClient.sendEvent.bind(gatewayClient))(new Device.Message(JSON.stringify({["ping"]:1})));
+        // TODO: add any gateway specific telemetry if needed
+        // await util.promisify(gatewayClient.sendEvent.bind(gatewayClient))(new Device.Message(JSON.stringify({["ping"]:1})));
         await util.promisify(gatewayClient.close.bind(gatewayClient))();
 
     } catch (e) {
@@ -130,16 +131,9 @@ async function getDeviceHub(context, device) {
     };
     
     if(device.gatewayId){
-        /*bodyJson["data"]=  {
+        bodyJson["data"]=  {
             "__iotcGatewayId": device.gatewayId
-        }
-        */
-       bodyJson["data"]= {
-        "__iot:interfaces": {
-           "CapabilityModelUri": "http://example.com/Amqp/1.0.0",
-           "ModelRepositoryUri": "https://iotpnptest.azurewebsites.net"
-         }
-       }
+        } 
 
     }
 
