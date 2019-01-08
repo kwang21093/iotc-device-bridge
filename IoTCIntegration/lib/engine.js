@@ -40,7 +40,10 @@ module.exports = async function (context, device, measurements) {
     }
 
     if (!gatewayDevice) {
-        gatewayDevice = { deviceId: "iotc-bridge-gateway" };
+        gatewayDevice = { 
+            deviceId: "iotc-bridge-gateway",
+            isGatewayDevice: true
+     };
     }
 
     const gatewayClient = Device.Client.fromConnectionString(await getDeviceConnectionString(context, gatewayDevice), DeviceTransport.Http);
@@ -132,9 +135,17 @@ async function getDeviceHub(context, device) {
     
     if(device.gatewayId){
         bodyJson["data"]=  {
-            "__iotcGatewayId": device.gatewayId
+            "__iot:gateway": {
+                isGatewayDevice:false,
+                parentGatewayDeviceId: device.gatewayId
+            }
         } 
-
+    } else{
+        bodyJson["data"]=  {
+            "__iot:gateway": {
+                isGatewayDevice:true
+            }
+        } 
     }
 
     const registrationOptions = {
