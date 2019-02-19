@@ -22,7 +22,7 @@ let gatewayDevice;
 
 /**
  * Forwards external telemetry messages for IoT Central devices.
- * @param {{ idScope: string, primaryKeyUrl: string, log: Function, getSecret: (context: Object, secretUrl: string) => string }} context 
+ * @param {{ idScope: string, primaryKeyUrl: string, actAsGateway:boolean, gatewayDeviceId:string, log: Function, getSecret: (context: Object, secretUrl: string) => string }} context 
  * @param {{ deviceId: string }} device 
  * @param {{ [field: string]: number }} measurements 
  */
@@ -38,28 +38,30 @@ module.exports = async function (context, device, measurements) {
     if (!validateMeasurements(measurements)) {
         throw new StatusError('Invalid format: invalid measurement list.', 400);
     }
-
-    if (!gatewayDevice) {
-        gatewayDevice = { deviceId: "iotc-bridge-gateway" };
-    }
-
-    const gatewayClient = Device.Client.fromConnectionString(await getDeviceConnectionString(context, gatewayDevice), DeviceTransport.Http);
-    try {
-        await util.promisify(gatewayClient.open.bind(gatewayClient))();
-        context.log('[HTTP] Sending telemetry for gateway device', gatewayDevice.deviceId);
-        // TODO: add any gateway specific telemetry if needed
-        // await util.promisify(gatewayClient.sendEvent.bind(gatewayClient))(new Device.Message(JSON.stringify({["ping"]:1})));
-        await util.promisify(gatewayClient.close.bind(gatewayClient))();
-
-    } catch (e) {
-        // If the device was deleted, we remove its cached connection string
-        if (e.name === 'DeviceNotFoundError' && deviceCache[gatewayDevice.deviceId]) {
-            delete deviceCache[gatewayDevice.deviceId].connectionString;
+    if (context.actAsGateway) {
+        if (!gatewayDevice) {
+            gatewayDevice = { deviceId: context.gatewayDeviceId };
         }
-        throw new Error(`Unable to send telemetry for gateway device ${gatewayDevice.deviceId}: ${e.message}`);
+
+        const gatewayClient = Device.Client.fromConnectionString(await getDeviceConnectionString(context, gatewayDevice), DeviceTransport.Http);
+        try {
+            await util.promisify(gatewayClient.open.bind(gatewayClient))();
+            context.log('[HTTP] Sending telemetry for gateway device', gatewayDevice.deviceId);
+            // TODO: add any gateway specific telemetry if needed
+            // await util.promisify(gatewayClient.sendEvent.bind(gatewayClient))(new Device.Message(JSON.stringify({["ping"]:1})));
+            await util.promisify(gatewayClient.close.bind(gatewayClient))();
+
+        } catch (e) {
+            // If the device was deleted, we remove its cached connection string
+            if (e.name === 'DeviceNotFoundError' && deviceCache[gatewayDevice.deviceId]) {
+                delete deviceCache[gatewayDevice.deviceId].connectionString;
+            }
+            throw new Error(`Unable to send telemetry for gateway device ${gatewayDevice.deviceId}: ${e.message}`);
+        }
+
+        device.gatewayId = gatewayDevice.deviceId;
     }
 
-    device.gatewayId = gatewayDevice.deviceId;
     const client = Device.Client.fromConnectionString(await getDeviceConnectionString(context, device), DeviceTransport.Http);
 
     try {
@@ -129,18 +131,23 @@ async function getDeviceHub(context, device) {
     const bodyJson = {
         registrationId: deviceId
     };
-    
-    if(device.gatewayId){
-        bodyJson["data"]=  {
-            "__iotcGatewayId": device.gatewayId,
-            "__iotcIsGateway": false
-        } 
 
-    }else{
-        bodyJson["data"]=  {
-            "__iotcGatewayId": "",
-            "__iotcIsGateway":true
-        } 
+    if (context.actAsGateway) {
+        if (device.gatewayId) {
+            bodyJson["data"] = {
+                iotcGateway: {
+                    iotcGatewayId: device.gatewayId,
+                    iotcIsGateway: false
+                }
+            }
+        } else {
+            bodyJson["data"] = {
+                iotcGateway: {
+                    iotcGatewayId: null,
+                    iotcIsGateway: true
+                }
+            }
+        }
     }
 
     const registrationOptions = {
