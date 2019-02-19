@@ -13,15 +13,16 @@ const StatusError = require('../error').StatusError;
 
 const registrationHost = 'global.azure-devices-provisioning.net';
 const registrationSasTtl = 3600; // 1 hour
-const registrationApiVersion = `2018-09-01-preview`;
+const registrationApiVersion = `2019-01-15`;
 const registrationRetryTimeouts = [500, 1000, 2000, 4000];
-const minDeviceRegistrationTimeout = 60*1000; // 1 minute
+const minDeviceRegistrationTimeout = 60 * 1000; // 1 minute
 
 const deviceCache = {};
+let gatewayDevice;
 
 /**
  * Forwards external telemetry messages for IoT Central devices.
- * @param {{ idScope: string, primaryKeyUrl: string, log: Function, getSecret: (context: Object, secretUrl: string) => string }} context 
+ * @param {{ idScope: string, primaryKeyUrl: string, actAsGateway:boolean, gatewayDeviceId:string, log: Function, getSecret: (context: Object, secretUrl: string) => string }} context 
  * @param {{ deviceId: string }} device 
  * @param {{ [field: string]: number }} measurements 
  */
@@ -36,6 +37,29 @@ module.exports = async function (context, device, measurements) {
 
     if (!validateMeasurements(measurements)) {
         throw new StatusError('Invalid format: invalid measurement list.', 400);
+    }
+    if (context.actAsGateway) {
+        if (!gatewayDevice) {
+            gatewayDevice = { deviceId: context.gatewayDeviceId };
+        }
+
+        const gatewayClient = Device.Client.fromConnectionString(await getDeviceConnectionString(context, gatewayDevice), DeviceTransport.Http);
+        try {
+            await util.promisify(gatewayClient.open.bind(gatewayClient))();
+            context.log('[HTTP] Sending telemetry for gateway device', gatewayDevice.deviceId);
+            // TODO: add any gateway specific telemetry if needed
+            // await util.promisify(gatewayClient.sendEvent.bind(gatewayClient))(new Device.Message(JSON.stringify({["ping"]:1})));
+            await util.promisify(gatewayClient.close.bind(gatewayClient))();
+
+        } catch (e) {
+            // If the device was deleted, we remove its cached connection string
+            if (e.name === 'DeviceNotFoundError' && deviceCache[gatewayDevice.deviceId]) {
+                delete deviceCache[gatewayDevice.deviceId].connectionString;
+            }
+            throw new Error(`Unable to send telemetry for gateway device ${gatewayDevice.deviceId}: ${e.message}`);
+        }
+
+        device.gatewayId = gatewayDevice.deviceId;
     }
 
     const client = Device.Client.fromConnectionString(await getDeviceConnectionString(context, device), DeviceTransport.Http);
@@ -104,13 +128,34 @@ async function getDeviceHub(context, device) {
     }
 
     const sasToken = await getRegistrationSasToken(context, deviceId);
+    const bodyJson = {
+        registrationId: deviceId
+    };
+
+    if (context.actAsGateway) {
+        if (device.gatewayId) {
+            bodyJson["data"] = {
+                iotcGateway: {
+                    iotcGatewayId: device.gatewayId,
+                    iotcIsGateway: false
+                }
+            }
+        } else {
+            bodyJson["data"] = {
+                iotcGateway: {
+                    iotcGatewayId: null,
+                    iotcIsGateway: true
+                }
+            }
+        }
+    }
 
     const registrationOptions = {
         url: `https://${registrationHost}/${context.idScope}/registrations/${deviceId}/register?api-version=${registrationApiVersion}`,
         method: 'PUT',
         json: true,
         headers: { Authorization: sasToken },
-        body: { registrationId: deviceId }
+        body: bodyJson,
     };
 
     try {
@@ -157,7 +202,7 @@ async function getRegistrationSasToken(context, deviceId) {
     const signature = crypto.createHmac('sha256', new Buffer(await getDeviceKey(context, deviceId), 'base64'))
         .update(`${uri}\n${ttl}`)
         .digest('base64');
-    return`SharedAccessSignature sr=${uri}&sig=${encodeURIComponent(signature)}&skn=registration&se=${ttl}`;
+    return `SharedAccessSignature sr=${uri}&sig=${encodeURIComponent(signature)}&skn=registration&se=${ttl}`;
 }
 
 /**

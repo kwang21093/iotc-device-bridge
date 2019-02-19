@@ -7,6 +7,12 @@
         },
         "iotCentralSASKey": {
             "type": "String"
+        },
+        "iotCentralActAsGateway": {
+            "type": "bool"
+        },
+        "iotCentralGatewayDeviceId": {
+            "type": "String"
         }
     },
     "variables": {
@@ -65,6 +71,8 @@
                         { "name": "WEBSITE_NODE_DEFAULT_VERSION", "value": "8.4.0" },
                         { "name": "WEBSITE_HTTPSCALEV2_ENABLED", "value": 0 },
                         { "name": "ID_SCOPE", "value": "[parameters('scopeID')]" },
+                        { "name": "IOTC_ACT_AS_GATEWAY", "value": "[parameters('iotCentralActAsGateway')]" },
+                        { "name": "IOTC_GATEWAY_DEVICEID", "value": "[parameters('iotCentralGatewayDeviceId')]" },
                         { "name": "IOTC_KEY_URL", "value": "[concat('https://', variables('keyVaultName'), '.vault.azure.net/secrets/', variables('iotcKeyName'), '/')]" }
                     ]
                 }
