@@ -14,23 +14,23 @@ During device registartion device can reigester itself to have following charact
 You can see gateway connection attributtes within device explorer or select corresponding columns when defining deviceset. 
 
 Unassosiated gateway device
-![Gateway device](assets\UnassociatedGateway.png "Gateway device")  
+![Gateway device](assets/UnassociatedGateway.png "Gateway device")  
 
 Unassociated Device connected to gateway
-![Unassociated Device connected to gateway](assets\UnassociatedGateway.png "Unassociated Device connected to gateway") 
+![Unassociated Device connected to gateway](assets/UnassociatedGateway.png "Unassociated Device connected to gateway") 
 
 Associated devices view
-![Device Explorer with gateway information](assets\AssociatedGatewayAndChild.png "Device Explorer with gateway information")
+![Device Explorer with gateway information](assets/AssociatedGatewayAndChild.png "Device Explorer with gateway information")
 
 Configure deviceset to display gateway related columns
 
-![Configure deviceset to display gateway related columns](assets\gateway-deviceset-configure.png "Configure deviceset to display gateway related columns")
+![Configure deviceset to display gateway related columns](assets/gateway-deviceset-configure.png "Configure deviceset to display gateway related columns")
 
 ### Search to display all devices connected to a given gateway
 Full text search has been extended to search within deviceGatewayId represented as 'Connected through' column in device explorer.
 You can see all child devices connected to a given gateway by entering gateway device id within search input.
 
-![Search to display all devices connected to a given gateway ](assets\gateway-search.png "Search to display all devices connected to a given gateway")
+![Search to display all devices connected to a given gateway ](assets/gateway-search.png "Search to display all devices connected to a given gateway")
 
 ## What has been changed in fork
 See original documentation in Read.me of upstream branch for complete deployment instruction.
@@ -47,7 +47,7 @@ See original documentation in Read.me of upstream branch for complete deployment
 
  Gateway Device Id - is device id which will represent bridge as a gateway device within Azure Iot Central 
 
- ![Act as Gateway and gateway device id](assets\DeploymentArmChanges.png "Act as Gateway and gateway device id")
+ ![Act as Gateway and gateway device id](assets/DeploymentArmChanges.png "Act as Gateway and gateway device id")
 
 
 ## [lib/engine.js changes](IoTCIntegration\lib\engine.js)
