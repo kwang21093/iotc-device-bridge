@@ -1,6 +1,8 @@
 # Fork changes for Azure IoT Central Device Bridge to represent bridge as a gateway device within Azure IoT Central
 The current fork has changes to enable Azure IoT Central Device Bridge to be represented in IoT Cental as a gateway.
 
+[![Deploy to Azure](http://azuredeploy.net/deploybutton.png)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgtrifonov%2Fiotc-device-bridge%2Fmaster%2Fazuredeploy.json)
+
 ## New Azure Iot Central features to display generic, transparent gateway devices  
 With the latest changes in Azure IoT Central, users are able to see the parent-child relationship between the generic gateway device and child devices connected through a given gateway. 
 
