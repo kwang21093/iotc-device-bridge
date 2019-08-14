@@ -1,29 +1,72 @@
+# Additional fork changes for Rigado onboarding
+
+## Overall
+
+- Removed the need for the `IoT Central Act As Gateway` field, as this will always be true
+- Removed the hard-coding for `IoT Central Gateway Device Id`, instead the `gatewayId` that is sent in the `device` object will be used. This allows the IoT Central app to be able to:
+  - be flexible on what gateways it listens to
+  - listen to multiple gateways at once
+
+## [lib/engine.js changes](IoTCIntegration\lib\engine.js)
+
+- Booleans are not supported by Azure IoT Central, so they are converted to their integer equivalents
+  
+```js
+/**
+ * Converts all the boolean measurements into integers
+ */
+function convertMeasurements(measurements) {
+  for (const field in measurements) {
+    if (typeof measurements[field] == 'boolean') {
+        measurements[field] = measurements[field] ? 1 : 0;
+    }
+  }
+}
+```
+
+- Encapsulated `deviceId` validation
+  
+```js
+/**
+ * @returns true if deviceId conforms to Azure requirements
+ */
+function validateDeviceId(deviceId) {
+    return deviceId && /^[a-z0-9\-]+$/.test(deviceId);
+}
+```
+
+More info about Rigado [here](https://catalog.azureiotsolutions.com/details?title=Cascade_500-IoT-Gateway&source=all-devices-page).
+
 # Fork changes for Azure IoT Central Device Bridge to represent bridge as a gateway device within Azure IoT Central
+
 The current fork has changes to enable Azure IoT Central Device Bridge to be represented in IoT Cental as a gateway.
 
 To use the device bridge solution, you will need the following:
+
 - an Azure account. You can create a free Azure account from [here](https://aka.ms/aft-iot)
 - an Azure IoT Central application to connect the devices. Create a free app by following [these instructions](https://docs.microsoft.com/en-us/azure/iot-central/quick-deploy-iot-central)
 
 [![Deploy to Azure](http://azuredeploy.net/deploybutton.png)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fkwang21093%2Fiotc-device-bridge%2Fmaster%2Fazuredeploy.json)
 
 ## New Azure Iot Central features to display generic, transparent gateway devices  
-With the latest changes in Azure IoT Central, users are able to see the parent-child relationship between the generic gateway device and child devices connected through a given gateway. 
+
+With the latest changes in Azure IoT Central, users are able to see the parent-child relationship between the generic gateway device and child devices connected through a given gateway.
 
 During device registration, the device can register itself to have the following characteristics:
+
 - Regular device connected directly to IoT Central
 - Generic gateway device
 - Device connected to IoT Central through the generic gateway. The device indicates its parent gateway device ID through which it is connected to
 
-
 ### Displaying device gateway information within Device Explorer and Device Sets
+
 In order to view the gateway connection attributes within the Device Explorer or Device Sets pages, you can click "Column Options" to add the "Device Type" and "Connected to" column options.
 
 Unassosiated gateway device
 ![Gateway device](assets/UnassociatedGateway.png "Gateway device")  
 
 Unassociated Device connected to gateway
-![Unassociated Device connected to gateway](assets/UnassociatedGateway.png "Unassociated Device connected to gateway") 
+![Unassociated Device connected to gateway](assets/UnassociatedGateway.png "Unassociated Device connected to gateway")
 
 Associated devices view
 ![Device Explorer with gateway information](assets/AssociatedGatewayAndChild.png "Device Explorer with gateway information")
@@ -33,6 +76,7 @@ Configure Device Set to display gateway related columns
 ![Configure deviceset to display gateway related columns](assets/gateway-deviceset-configure.png "Configure deviceset to display gateway related columns")
 
 ### Search to display all devices connected to a given gateway
+
 Full text search has been extended to search within deviceGatewayId represented as "Connected to" column in the Device Explorer.
 You can see all child devices connected to a given gateway by entering gateway device ID within search input.
 
@@ -51,7 +95,9 @@ the current date and time will be used.
 ![Associate device](assets/associate.PNG "Associate device")
 
 ## What is being provisioned? (pricing)
+
 The custom template in this repository will provision the following Azure resources:
+
 - Key Vault, needed to store your IoT Central key
 - Storage Account
 - Function App
@@ -68,28 +114,31 @@ Using a standard App Service Plan, the maximum observed performance of the Azure
 in documentation](https://docs.microsoft.com/en-us/azure/azure-functions/functions-scale).
 
 ## Changes to the fork
+
 See original documentation in Read.me of upstream branch for complete deployment instructions.
 
 [azuredeploy.json](azuredeploy.json) has been modified to include 2 new parameters:
 
+```json
 "iotCentralActAsGateway": {
-            "type": "bool"
-        },
-        "iotCentralGatewayDeviceId": {
-            "type": "String"
+    "type": "bool"
+},
+"iotCentralGatewayDeviceId": {
+    "type": "String"
 }
+```
+
 Act as Gateway is a boolean flag indicating if device bridge should register itself as a gateway within IotCentral. Set this flag to true otherwise solution will work as upstream branch.
 
- Gateway Device ID is a device ID which will represent the bridge as a gateway device within Azure IoT Central. 
+ Gateway Device ID is a device ID which will represent the bridge as a gateway device within Azure IoT Central.
 
  ![Act as Gateway and gateway device id](assets/DeploymentArmChanges.png "Act as Gateway and gateway device id")
-
 
 ## [lib/engine.js changes](IoTCIntegration\lib\engine.js)
 
 A code block has been introduced to register the bridge as a gateway when the Azure Function receives it's first request. Please take note that none of subsequent requests will be proccessed until the bridge is assocciated with a Device Template in your IoT Central application.
 
-```
+```js
 if (context.actAsGateway) {
         if (!gatewayDevice) {
             gatewayDevice = { deviceId: context.gatewayDeviceId };
@@ -117,7 +166,7 @@ if (context.actAsGateway) {
   
 Device Provisioning Service api call has been changed to add ab extra post body information to indicate if the device is a gateway device or a child device connected to the gateway.
 
-```
+```js
 const bodyJson = {
         registrationId: deviceId
     };
@@ -151,4 +200,5 @@ const bodyJson = {
 ```
 
 ## Limitations
+
 This device bridge only forwards messages to IoT Central, and does not send messages back to devices. Due to the unidirectional nature of this solution, `settings` and `commands` will **not** work for devices that connect to IoT Central through this device bridge. Because device twin operations are also not supported, it's **not** possible to update `device properties` through this setup. To use these features, a device must be connected directly to IoT Central using one of the [Azure IoT device SDKs](https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-devguide-sdks).
