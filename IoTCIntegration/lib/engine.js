@@ -14,7 +14,8 @@ const StatusError = require('../error').StatusError;
 const registrationHost = 'global.azure-devices-provisioning.net';
 const registrationSasTtl = 3600; // 1 hour
 const registrationApiVersion = `2019-01-15`;
-const registrationRetryTimeouts = [500, 1000, 2000, 4000];
+const registrationStatusQueryAttempts = 10;
+const registrationStatusQueryTimeout = 2000;
 const minDeviceRegistrationTimeout = 60 * 1000; // 1 minute
 
 const deviceCache = {};
@@ -23,24 +24,31 @@ let gatewayDevice;
 /**
  * Forwards external telemetry messages for IoT Central devices.
  * @param {{ idScope: string, primaryKeyUrl: string, actAsGateway:boolean, gatewayDeviceId:string, log: Function, getSecret: (context: Object, secretUrl: string) => string }} context 
- * @param {{ deviceId: string }} device 
- * @param {{ [field: string]: number }} measurements 
+ * @param {{ deviceId: string, gatewayId: string }} device 
+ * @param {{ [field: string]: number }} measurements
+ * @param {{ timestamp: string }} timestamp
  */
-module.exports = async function (context, device, measurements) {
+module.exports = async function (context, device, measurements, timestamp) {
     if (device) {
-        if (!device.deviceId || !/^[a-z0-9\-]+$/.test(device.deviceId)) {
+        if (!validateDeviceId(device.deviceId)) {
             throw new StatusError('Invalid format: deviceId must be alphanumeric, lowercase, and may contain hyphens.', 400);
         }
     } else {
         throw new StatusError('Invalid format: a device specification must be provided.', 400);
     }
 
+    convertMeasurements(measurements);
+
     if (!validateMeasurements(measurements)) {
         throw new StatusError('Invalid format: invalid measurement list.', 400);
     }
     if (context.actAsGateway) {
+        if (!validateDeviceId(device.gatewayId)) {
+            throw new StatusError('Invalid format: gatewayId must be alphanumeric, lowercase, and may contain hyphens.', 400);
+        }
+
         if (!gatewayDevice) {
-            gatewayDevice = { deviceId: context.gatewayDeviceId };
+            gatewayDevice = { deviceId: device.gatewayId };
         }
 
         const gatewayClient = Device.Client.fromConnectionString(await getDeviceConnectionString(context, gatewayDevice), DeviceTransport.Http);
@@ -58,16 +66,24 @@ module.exports = async function (context, device, measurements) {
             }
             throw new Error(`Unable to send telemetry for gateway device ${gatewayDevice.deviceId}: ${e.message}`);
         }
+    }
 
-        device.gatewayId = gatewayDevice.deviceId;
+    if (timestamp && isNaN(Date.parse(timestamp))) {
+        throw new StatusError('Invalid format: if present, timestamp must be in ISO format (e.g., YYYY-MM-DDTHH:mm:ss.sssZ)', 400);
     }
 
     const client = Device.Client.fromConnectionString(await getDeviceConnectionString(context, device), DeviceTransport.Http);
 
     try {
+        const message = new Device.Message(JSON.stringify(measurements));
+
+        if (timestamp) {
+            message.properties.add('iothub-creation-time-utc', timestamp);
+        }
+
         await util.promisify(client.open.bind(client))();
         context.log('[HTTP] Sending telemetry for device', device.deviceId);
-        await util.promisify(client.sendEvent.bind(client))(new Device.Message(JSON.stringify(measurements)));
+        await util.promisify(client.sendEvent.bind(client))(message);
         await util.promisify(client.close.bind(client))();
     } catch (e) {
         // If the device was deleted, we remove its cached connection string
@@ -80,6 +96,24 @@ module.exports = async function (context, device, measurements) {
 };
 
 /**
+ * @returns true if deviceId conforms to Azure requirements
+ */
+function validateDeviceId(deviceId) {
+    return deviceId && /^[a-z0-9\-]+$/.test(deviceId);
+}
+
+/**
+ * Converts all the boolean measurements into integers
+ */
+function convertMeasurements(measurements) {
+  for (const field in measurements) {
+    if (typeof measurements[field] == 'boolean') {
+        measurements[field] = measurements[field] ? 1 : 0;
+    }
+  }
+}
+
+/**
  * @returns true if measurements object is valid, i.e., a map of field names to numbers or strings.
  */
 function validateMeasurements(measurements) {
@@ -88,9 +122,24 @@ function validateMeasurements(measurements) {
     }
 
     for (const field in measurements) {
-        if (typeof measurements[field] !== 'number' && typeof measurements[field] !== 'string') {
+        if (typeof measurements[field] !== 'number' && typeof measurements[field] !== 'string' && !isLocation(measurements[field])) {
             return false;
         }
+    }
+
+    return true;
+}
+
+/**
+ * @returns true if a measurement is a location.
+ */
+function isLocation(measurement) {
+    if (!measurement || typeof measurement !== 'object' || typeof measurement.lat !== 'number' || typeof measurement.lon !== 'number') {
+        return false;
+    }
+
+    if ('alt' in measurement && typeof measurement.alt !== 'number') {
+        return false;
     }
 
     return true;
@@ -174,13 +223,15 @@ async function getDeviceHub(context, device) {
         };
 
         // The first registration call starts the process, we then query the registration status
-        // up to 4 times.
-        for (const timeout of [...registrationRetryTimeouts, 0 /* Fail right away after the last attempt */]) {
+        // every 2 seconds, up to 10 times.
+        for (let i = 0; i < registrationStatusQueryAttempts; ++i) {
+            await new Promise(resolve => setTimeout(resolve, registrationStatusQueryTimeout));
+
             context.log('[HTTP] Querying device registration status');
             const statusResponse = await request(statusOptions);
 
             if (statusResponse.status === 'assigning') {
-                await new Promise(resolve => setTimeout(resolve, timeout));
+                continue;
             } else if (statusResponse.status === 'assigned' && statusResponse.registrationState && statusResponse.registrationState.assignedHub) {
                 return statusResponse.registrationState.assignedHub;
             } else if (statusResponse.status === 'failed' && statusResponse.registrationState && statusResponse.registrationState.errorCode === 400209) {
