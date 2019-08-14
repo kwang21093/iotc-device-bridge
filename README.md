@@ -1,4 +1,6 @@
-# Additional fork changes for Rigado onboarding
+# IoT Central Device Bridge, with gateway support, Rigado compatibility, and added simplifications
+
+## Additional fork changes for Rigado compatibility
 
 ## Overall
 
@@ -37,7 +39,7 @@ function validateDeviceId(deviceId) {
 
 More info about Rigado [here](https://catalog.azureiotsolutions.com/details?title=Cascade_500-IoT-Gateway&source=all-devices-page).
 
-# Fork changes for Azure IoT Central Device Bridge to represent bridge as a gateway device within Azure IoT Central
+## Fork changes for Azure IoT Central Device Bridge to represent bridge as a gateway device within Azure IoT Central
 
 The current fork has changes to enable Azure IoT Central Device Bridge to be represented in IoT Cental as a gateway.
 
