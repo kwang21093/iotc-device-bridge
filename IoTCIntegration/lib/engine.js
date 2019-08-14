@@ -23,7 +23,7 @@ let gatewayDevice;
 
 /**
  * Forwards external telemetry messages for IoT Central devices.
- * @param {{ idScope: string, primaryKeyUrl: string, actAsGateway:boolean, gatewayDeviceId:string, log: Function, getSecret: (context: Object, secretUrl: string) => string }} context 
+ * @param {{ idScope: string, primaryKeyUrl: string, log: Function, getSecret: (context: Object, secretUrl: string) => string }} context 
  * @param {{ deviceId: string, gatewayId: string }} device 
  * @param {{ [field: string]: number }} measurements
  * @param {{ timestamp: string }} timestamp
@@ -42,30 +42,29 @@ module.exports = async function (context, device, measurements, timestamp) {
     if (!validateMeasurements(measurements)) {
         throw new StatusError('Invalid format: invalid measurement list.', 400);
     }
-    if (context.actAsGateway) {
-        if (!validateDeviceId(device.gatewayId)) {
-            throw new StatusError('Invalid format: gatewayId must be alphanumeric, lowercase, and may contain hyphens.', 400);
-        }
 
-        if (!gatewayDevice) {
-            gatewayDevice = { deviceId: device.gatewayId };
-        }
+    if (!validateDeviceId(device.gatewayId)) {
+        throw new StatusError('Invalid format: gatewayId must be alphanumeric, lowercase, and may contain hyphens.', 400);
+    }
 
-        const gatewayClient = Device.Client.fromConnectionString(await getDeviceConnectionString(context, gatewayDevice), DeviceTransport.Http);
-        try {
-            await util.promisify(gatewayClient.open.bind(gatewayClient))();
-            context.log('[HTTP] Sending telemetry for gateway device', gatewayDevice.deviceId);
-            // TODO: add any gateway specific telemetry if needed
-            // await util.promisify(gatewayClient.sendEvent.bind(gatewayClient))(new Device.Message(JSON.stringify({["ping"]:1})));
-            await util.promisify(gatewayClient.close.bind(gatewayClient))();
+    if (!gatewayDevice) {
+        gatewayDevice = { deviceId: device.gatewayId };
+    }
 
-        } catch (e) {
-            // If the device was deleted, we remove its cached connection string
-            if (e.name === 'DeviceNotFoundError' && deviceCache[gatewayDevice.deviceId]) {
-                delete deviceCache[gatewayDevice.deviceId].connectionString;
-            }
-            throw new Error(`Unable to send telemetry for gateway device ${gatewayDevice.deviceId}: ${e.message}`);
+    const gatewayClient = Device.Client.fromConnectionString(await getDeviceConnectionString(context, gatewayDevice), DeviceTransport.Http);
+    try {
+        await util.promisify(gatewayClient.open.bind(gatewayClient))();
+        context.log('[HTTP] Sending telemetry for gateway device', gatewayDevice.deviceId);
+        // TODO: add any gateway specific telemetry if needed
+        // await util.promisify(gatewayClient.sendEvent.bind(gatewayClient))(new Device.Message(JSON.stringify({["ping"]:1})));
+        await util.promisify(gatewayClient.close.bind(gatewayClient))();
+
+    } catch (e) {
+        // If the device was deleted, we remove its cached connection string
+        if (e.name === 'DeviceNotFoundError' && deviceCache[gatewayDevice.deviceId]) {
+            delete deviceCache[gatewayDevice.deviceId].connectionString;
         }
+        throw new Error(`Unable to send telemetry for gateway device ${gatewayDevice.deviceId}: ${e.message}`);
     }
 
     if (timestamp && isNaN(Date.parse(timestamp))) {
@@ -180,21 +179,19 @@ async function getDeviceHub(context, device) {
     const bodyJson = {
         registrationId: deviceId
     };
-
-    if (context.actAsGateway) {
-        if (device.gatewayId) {
-            bodyJson["data"] = {
-                iotcGateway: {
-                    iotcGatewayId: device.gatewayId,
-                    iotcIsGateway: false
-                }
+    
+    if (device.gatewayId) {
+        bodyJson["data"] = {
+            iotcGateway: {
+                iotcGatewayId: device.gatewayId,
+                iotcIsGateway: false
             }
-        } else {
-            bodyJson["data"] = {
-                iotcGateway: {
-                    iotcGatewayId: null,
-                    iotcIsGateway: true
-                }
+        }
+    } else {
+        bodyJson["data"] = {
+            iotcGateway: {
+                iotcGatewayId: null,
+                iotcIsGateway: true
             }
         }
     }

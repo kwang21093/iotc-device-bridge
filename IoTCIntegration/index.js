@@ -11,9 +11,7 @@ const msiSecret = process.env.MSI_SECRET;
 
 const parameters = {
     idScope: process.env.ID_SCOPE,
-    primaryKeyUrl: process.env.IOTC_KEY_URL,
-    actAsGateway: process.env.IOTC_ACT_AS_GATEWAY,
-    gatewayDeviceId: process.env.IOTC_GATEWAY_DEVICEID,
+    primaryKeyUrl: process.env.IOTC_KEY_URL
 };
 
 let kvToken;
